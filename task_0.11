@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# GLOBAL
+tasks="/home/METROSOFT/a.sitnikov/project/task/tasks"
+task_tmp="/home/METROSOFT/a.sitnikov/project/task/tasks_tmp"
+version="v0.5"
+
+#FUNCTIONS
+usage()
+{
+		echo "Usage: task -a Some task to append"
+		echo "Usage: task -d 3 (Delete some task)"
+		echo "Usage: task (is to show)"
+		echo "Available keys: -a -d -v"
+}
+
+findChildren()
+{		
+	if [[ $1 && $2 ]]; then
+		for task in $(cat $tasks | awk -F: 'BEGIN{id='$1'} { if($2=="1" && $3==id ) print $0}'| sed 's/ /\#/g'	); do 
+			spaces=""
+			for (( i = 0; i < $2; i++ )); do
+				spaces=$spaces"______"
+			done			
+			echo $spaces$task | awk -F: '{printf "%3s:%s\n",$1,$4}' | sed -e 's/\#/ /g' -e 's/_/ /g'
+			parent=$(echo $task | awk -F: '{ if($2=="1" && $3!=0) print $1}')
+			findChildren $parent $(($2+1))							
+		done
+	fi
+}
+
+show()
+{	#for task in $(cat $tasks | awk -F: '{ if($2=="1" && $3==0) print}' ); do
+	#result=$(cat  $tasks )
+	#for task in "$result"; do
+	for task in $(cat $tasks | awk -F: '{ if($2=="1" && $3==0) print $0}' | sed 's/ /\#/g' ); do
+		echo $task | awk -F: '{printf "%2s:%s\n",$1,$4}' | sed 's/\#/ /g' 
+		parent=$(echo $task | awk -F: '{ if($2=="1" && $3==0) print $1}')		
+		findChildren $parent 1
+	done
+}
+
+#CODE
+
+if [[ $1 = "-a" || $1 = "-d" || $1 = "-v"  ]]; then
+	if [[ $1 = "-a" ]]; then
+		shift
+		echo "$@" >> $tasks		
+		show
+		echo "OK"
+	fi	
+	if [[ $1 = "-v" ]]; then		
+		echo $version
+	fi	
+	if [[ $1 = "-d" ]]; then
+		if [[ $2 ]]; then
+			echo "$2"
+			cat $tasks | grep -n .. | grep -v "$2:" | awk -F: '{print $2}' > $task_tmp
+			cat $task_tmp > $tasks
+			rm $task_tmp
+			show
+		else
+			echo "NOT ENOUGH ARGUMENTS :"
+			usage
+		fi		
+	fi	
+else
+	if [[ $1 ]];then
+		usage
+	else
+		show
+	fi
+fi

@@ -1,0 +1,256 @@
+#!/bin/bash
+
+# GLOBAL
+NO_ARGS=0
+E_OPTERROR=65
+tasks="/mnt/taskfolder/tasks"
+task_tmp="/mnt/taskfolder/tasks_tmp"
+tmp="/mnt/taskfolder/tasks_tmp"
+version="v0.5"
+flag="";
+parent="0";
+isShow=1;
+
+#FUNCTIONS
+usage()
+{
+	echo "~~~~~~~~~~~~~~~~~Help:~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	echo " version 0.5 any suggesion mail me on  a.p.sitnikov@gmail.com"
+	echo
+	echo "usage: `basename $0` options (-padvrch)"			
+	echo
+	echo "`basename $0` -a                      = Add the task"
+	echo "`basename $0` -a  -p NUM              = Add the task with parent of NUM task"
+	echo "`basename $0` -d  NUM                 = Delete the task number NUM"
+	echo "`basename $0` -v [ all | complete ]   = Show the task all or completed only"
+	echo "`basename $0` -r num1 num2            = Make a relation of tasks  where num1 is task and num2 is it's parent"
+	echo "`basename $0` -c NUM                  = Finish the NUM task (set a status completed)"
+	echo "`basename $0` -h                      = To show this menu"
+	echo "`basename $0` with no options         = To show only current|active tasks"
+}
+#------------------------------------------------------------------------
+findChildren()
+{		
+	if [[ $1 && $2 ]]; then
+		for task in $(cat $tasks | awk -F: 'BEGIN{id='$1'} { if($2=="1" && $3==id ) print $0}'| sed 's/ /\#/g'	); do 
+			spaces=""
+			for (( i = 0; i < $2; i++ )); do
+				spaces=$spaces"______"
+			done			
+			echo $spaces$task | awk -F: '{printf "%3s:%s\n",$1,$4}' | sed -e 's/\#/ /g' -e 's/_/ /g'
+			parent=$(echo $task | awk -F: '{ if($2=="1" && $3!=0) print $1}')
+			findChildren $parent $(($2+1))							
+		done
+	fi
+}
+
+show()
+{	#for task in $(cat $tasks | awk -F: '{ if($2=="1" && $3==0) print}' ); do
+	#result=$(cat  $tasks )
+	#for task in "$result"; do
+	for task in $(cat $tasks | awk -F: '{ if($2=="1" && $3==0) print $0}' | sed 's/ /\#/g' ); do
+		echo $task | awk -F: '{printf "%2s:%s\n",$1,$4}' | sed 's/\#/ /g' 
+		parent=$(echo $task | awk -F: '{ if($2=="1" && $3==0) print $1}')		
+		findChildren $parent 1
+	done
+}
+#------------------------------------------------------------------------
+findChildrenAll()
+{		
+	if [[ $1 && $2 ]]; then
+		for task in $(cat $tasks | awk -F: 'BEGIN{id='$1'} { if( $3==id ) print $0}'| sed 's/ /\#/g'	); do 
+			spaces=""
+			for (( i = 0; i < $2; i++ )); do
+				spaces=$spaces"______"
+			done			
+			echo -e '\E[37;32m'"\033[1m"$spaces$task"\033[0m" | awk -F: '{if($2=="0")printf "%3s:%s\n",$1,$4;  }' | sed -e 's/\#/ /g' -e 's/_/ /g'
+			echo $spaces$task | awk -F: '{if($2=="1")printf "%3s:%s\n",$1,$4;  }' | sed -e 's/\#/ /g' -e 's/_/ /g'			
+			parent=$(echo $task | awk -F: '{ if($2=="1" && $3!=0) print $1}')
+			findChildren $parent $(($2+1))							
+		done
+	fi
+}
+
+showAll()
+{	#echo -e '\E[37;32m'"\033[1mСписок\033[0m"
+	for task in $(cat $tasks | awk -F: '{ if($3==0) print $0}' | sed 's/ /\#/g' ); do
+		echo -e '\E[37;32m'"\033[1m"$task"\033[0m" | awk -F: '{if($2=="0") printf "%2s:%s\n",$1,$4; }' | sed 's/\#/ /g' 
+		echo $task | awk -F: '{if($2=="1") printf "%2s:%s\n",$1,$4; }' | sed 's/\#/ /g' 
+		parent=$(echo $task | awk -F: '{ if($3==0) print $1}')		
+		findChildrenAll $parent 1
+	done
+}
+#------------------------------------------------------------------------
+#MAIN()
+
+
+if [ $# -eq "$NO_ARGS" ]  # Сценарий вызван без аргументов?
+then
+  #echo "usage: `basename $0` options (-padvrch)"
+  show
+  isShow=0;
+  #exit $E_OPTERROR        # Если аргументы отсутствуют -- выход с сообщением
+                          # о порядке использования скрипта
+fi
+
+
+
+while getopts ":p:ad:v:rc:h" Option
+do
+#echo $OPTIND
+  case $Option in
+	# ADD
+	a 	  ) 
+			if [[ $flag == "" ]]; then
+				flag="a"
+				echo "Adding a task:"
+				echo "Print a Task Description below and press enter:"
+				echo "-----------------------------------------------"
+				read line
+				id=$(tail -n 1 $tasks | awk -F: '{print $1}')
+				id=$(($id + 1))
+				echo "$id:1:$parent:$line" >> $tasks
+			fi
+			;;
+	h 	  ) 
+			usage
+			isShow=0;
+			;;
+	# PARENT
+    p     ) 
+			if [[ $flag == "a" ]]; then				
+				echo "Parent tasks: $OPTARG"
+				if [[ "$OPTARG" =~ ^[0-9]+$ ]] 
+				then
+					if [[ $OPTARG -lt $id  ]]; then
+						last=$(tail $tasks -n 1 | awk -F: '{OFS=":" ;$3='"$OPTARG"'; print $0}')
+						cat $tasks | grep -v ^$id: > $tmp						
+						echo $last >> $tmp
+						cat $tmp > $tasks
+						rm $tmp
+						#echo $id
+					else 
+						echo "NO MAN! there is no much tasks!"
+						cat $tasks | grep -v ^$id: > $tmp												
+						cat $tmp > $tasks
+						rm $tmp
+						isShow=0;
+					fi
+					
+					
+				else 
+					echo "FUUUUUUU WHY ARE YOU SO SLOW??? I SAID: Number With no characters!!!"
+					isShow=0;
+				fi
+			fi
+			# удалить последнюю строчку и записать ее с правильным родителем!
+			;;
+    # DELETE
+    d     ) 
+			if [[ $flag == "" ]]; then
+				flag="d"
+				echo "Deleting tasks: $OPTARG"
+				if [[ "$OPTARG" =~ ^[0-9]+$ ]] 
+				then
+					#echo "$OPTARG"					
+					cat $tasks | awk -F: '{print $3}' | grep $OPTARG &>/dev/null
+					if [[ $? -eq 1 ]]; then
+					cat $tasks | grep -v ^$OPTARG: > $tmp											
+					cat $tmp > $tasks
+					rm $tmp
+					else echo "There is any tasks related to current. U'd better delete them first and then continue."
+					isShow=0;
+					fi
+				else echo "FUUUUUUU WHY ARE YOU SO SLOW??? I SAID: Number With no characters!!!"
+				isShow=0;
+				fi
+			fi
+			;;
+    # VIEW
+    v     ) 
+			if [[ $flag == "" ]]; then
+				flag="v"
+				echo "View tasks: $OPTARG"
+				if [[ "$OPTARG" == "all" ]] 
+				then
+					#echo "$OPTARG"
+					showAll
+					isShow=0;
+				elif [[ "$OPTARG" == "complete" ]]; then
+					echo "$OPTARG"
+					isShow=0;
+					echo "no MAN! this feature is not made yet!!! wait for 1.0 release."
+				else echo "NOOOOPE!!!   Aloweded parameters are: all,complete"
+				isShow=0;
+				fi
+			fi
+			;;
+    # COMPLETE
+    c     ) 
+			if [[ $flag == "" ]]; then
+				flag="c"
+				echo "Finishing task: $OPTARG"
+				if [[ "$OPTARG" =~ ^[0-9]+$ ]] ;then
+					cat $tasks | awk -F: '{if($2=="1") print $3}' | grep $OPTARG &>/dev/null
+					if [[ $? -eq 1 ]]; then
+						cat $tasks | sed 's/^'$OPTARG':1:/'$OPTARG':0:/g' > $tmp
+						cat $tmp > $tasks
+						rm $tmp
+						echo "OK"
+					else echo "There is any tasks related to current. U'd better delete them first and then continue."
+						isShow=0;
+					fi
+				else echo "FUUUUUUU WHY ARE YOU SO SLOW??? I SAID: Number With no characters!!!"
+					isShow=0;
+				fi
+			fi
+			;;
+    # RELATION
+    r 	  ) 
+			if [[ $flag == "" ]]; then
+				flag="r"
+				echo "Make a relation:"
+				echo "Enter two digits below and press Enter:"
+				echo "-------------------------------------"
+				read line
+				#if [[ "$line" =~ ^[0-9\ ]+$ ]] 
+				if [[ "$line" =~ ^[0-9]+\ [0-9]+$ ]] 
+				then
+					#echo "$line"
+					num2=$(echo $line | sed -r 's/^.* //g')
+					num1=$(echo $line | sed -r 's/ .*$//g')		
+					
+					if [[ $num1 != $num2 ]]; then
+						cat $tasks | grep ^$num1 &>/dev/null;
+						if [[ $? -eq 0 || $num2 == "0" ]]; then
+							cat $tasks | grep ^$num2 &>/dev/null;
+							if [[ $? -eq 0 || $num2 == "0" ]]; then
+								cat $tasks | sed -r 's/^('$num1':.:).+:/\1'$num2':/g' > $tmp
+								cat $tmp > $tasks
+								rm $tmp
+								#echo "OOOK"
+							else echo "num2 not found in tasks!!!"
+								isShow=0;
+							fi
+						else echo "num1 not found in tasks!!!"
+							isShow=0;
+						fi						
+					else echo "Numbers shouldnt be equal!!!"
+						isShow=0;
+					fi					
+				else echo "FUUUUUUU WHY ARE YOU SO STUPED??? I SAID: 2 Numbers with SPACE in the middle. No characters!!!"
+				isShow=0;
+				fi
+			fi
+			;;    
+    *     ) echo "Выбран недопустимый ключ.";;   # ПО-УМОЛЧАНИЮ
+  esac
+done
+shift $(($OPTIND - 1))
+# Переход к очередному параметру командной строки.
+#echo $*
+  if [[ $isShow == 1 ]]; then
+	show
+  fi
+
+exit 0
