@@ -1,0 +1,25 @@
+#!/bin/bash
+
+homefolder="/mnt/taskfolder"
+execfolder="/usr/bin/"
+
+if [[ $(whoami) == "root" ]];then
+	if [[ -e task && -e tasks ]];then
+		mkdir $homefolder 2>/dev/null
+		chmod -R 777 $homefolder
+		echo "Creating folder [ok]"
+		cp tasks $homefolder
+		chmod 777 tasks
+		echo "Coping tasks [ok]"
+		chmod +x task
+		cp task $execfolder
+		echo "CONGRATULATION!!! Now you can use this application!"
+		echo "Installation successfull!"
+	else echo "You havn't got any files to install"
+	fi
+
+else 
+	echo "You should be root to install this application =("
+	echo "I advice you try: "
+	echo "$ sudo ./`basename $0` "
+fi
